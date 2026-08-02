@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>随手记 PhotoNote</title>
+<style>
+  :root{
+    --primary:#2f6bff; --primary-dark:#1f4ed8; --bg:#f5f6f8;
+    --card:#ffffff; --text:#1f2329; --text2:#646a73; --line:#e8e9ec;
+    --danger:#e5484d; --radius:14px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--text); font-size:15px;
+  }
+  .app{max-width:480px;margin:0 auto;min-height:100vh;position:relative;background:var(--bg)}
+
+  /* ===== 顶部 ===== */
+  header{
+    position:sticky;top:0;z-index:20;background:var(--bg);
+    padding:14px 16px 8px;display:flex;align-items:center;gap:10px;
+  }
+  header h1{font-size:19px;font-weight:700;white-space:nowrap}
+  .search{
+    flex:1;display:flex;align-items:center;background:#fff;border:1px solid var(--line);
+    border-radius:20px;padding:7px 12px;gap:6px;
+  }
+  .search input{flex:1;border:none;outline:none;font-size:14px;background:transparent}
+  .tagbar{
+    position:sticky;top:50px;z-index:19;background:var(--bg);
+    padding:0 16px 8px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;
+  }
+  .tagbar::-webkit-scrollbar{display:none}
+  .chip{
+    flex-shrink:0;padding:5px 14px;border-radius:16px;background:#fff;
+    border:1px solid var(--line);font-size:13px;color:var(--text2);cursor:pointer;
+  }
+  .chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+  /* ===== 时间线 ===== */
+  main{padding:4px 16px 120px}
+  .day-group{margin-top:14px}
+  .day-title{font-size:13px;color:var(--text2);margin-bottom:8px;padding-left:2px}
+  .card{
+    background:var(--card);border-radius:var(--radius);overflow:hidden;
+    box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:10px;cursor:pointer;
+    border:1px solid var(--line);
+  }
+  .card img{width:100%;display:block;max-height:300px;object-fit:cover;background:#eee}
+  .card-info{padding:10px 12px}
+  .card-info .t{font-size:12px;color:var(--text2);display:flex;gap:6px;flex-wrap:wrap}
+  .card-info .n{
+    font-size:14px;margin-top:4px;line-height:1.5;color:var(--text);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  .card-info .n.empty{color:#b3b7bf}
+  .tags{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+  .tag{font-size:11px;color:var(--primary);background:#eef3ff;padding:2px 8px;border-radius:10px}
+  .empty-state{text-align:center;color:#b3b7bf;padding:80px 20px;font-size:14px}
+  .empty-state .big{font-size:40px;margin-bottom:10px}
+
+  /* ===== 悬浮拍照按钮 ===== */
+  .fab{
+    position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:30;
+    width:60px;height:60px;border-radius:50%;background:var(--primary);
+    color:#fff;font-size:30px;border:none;box-shadow:0 4px 14px rgba(47,107,255,.4);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    font-weight:300;max-width:480px;
+  }
+  .fab:active{transform:translateX(-50%) scale(.94)}
+
+  /* ===== 弹层 ===== */
+  .sheet{
+    position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.45);
+    display:none;align-items:flex-end;justify-content:center;
+  }
+  .sheet.show{display:flex}
+  .sheet-body{
+    background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;
+    padding:16px;max-height:92vh;overflow-y:auto;
+    animation:up .22s ease;
+  }
+  @keyframes up{from{transform:translateY(40px);opacity:.5}to{transform:none;opacity:1}}
+  .sheet-title{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+  .sheet-close{font-size:13px;color:var(--text2);cursor:pointer;padding:4px 8px}
+
+  .preview-img{width:100%;border-radius:10px;max-height:45vh;object-fit:contain;background:#111;margin-bottom:12px}
+
+  .field{margin-bottom:12px}
+  .field label{font-size:13px;color:var(--text2);display:block;margin-bottom:5px}
+  .field input,.field textarea{
+    width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+    font-size:15px;outline:none;background:#fff;color:var(--text);font-family:inherit;
+  }
+  .field textarea{min-height:90px;resize:vertical;line-height:1.6}
+  .field input:focus,.field textarea:focus{border-color:var(--primary)}
+  .readonly-row{
+    display:flex;align-items:center;justify-content:space-between;
+    background:#f7f8fa;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:14px;
+  }
+  .readonly-row .k{color:var(--text2);font-size:13px}
+  .readonly-row .v{color:var(--text);max-width:70%;text-align:right;word-break:break-all}
+  .btn{
+    width:100%;padding:13px;border-radius:12px;border:none;font-size:16px;font-weight:600;
+    cursor:pointer;margin-top:10px;
+  }
+  .btn-primary{background:var(--primary);color:#fff}
+  .btn-primary:active{background:var(--primary-dark)}
+  .btn-danger{background:#fdecec;color:var(--danger)}
+  .btn-ghost{background:#f2f3f5;color:var(--text2)}
+  .btn-row{display:flex;gap:10px}
+  .btn-row .btn{flex:1}
+
+  .tag-select{display:flex;gap:8px;flex-wrap:wrap}
+  .tag-opt{padding:6px 14px;border-radius:16px;background:#f2f3f5;font-size:13px;cursor:pointer;border:1px solid transparent}
+  .tag-opt.sel{background:#eef3ff;color:var(--primary);border-color:var(--primary)}
+
+  /* 导出模板 */
+  .tmpl{display:flex;gap:10px;margin-top:8px}
+  .tmpl-item{flex:1;border:2px solid var(--line);border-radius:10px;padding:10px 4px;text-align:center;font-size:12px;color:var(--text2);cursor:pointer}
+  .tmpl-item.sel{border-color:var(--primary);color:var(--primary);background:#eef3ff}
+  .tmpl-item .mini{width:28px;height:34px;border:2px solid currentColor;border-radius:3px;margin:0 auto 6px}
+  .tmpl-item[data-t="square"] .mini{height:28px}
+  .tmpl-item[data-t="portrait"] .mini{height:44px}
+  .export-preview{width:100%;border-radius:10px;margin-top:12px;border:1px solid var(--line)}
+
+  .toast{
+    position:fixed;left:50%;bottom:100px;transform:translateX(-50%);z-index:60;
+    background:rgba(0,0,0,.8);color:#fff;padding:9px 18px;border-radius:20px;
+    font-size:14px;display:none;white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>📷 随手记</h1>
+    <div class="search">
+      <span style="color:#b3b7bf">🔍</span>
+      <input id="searchInput" placeholder="搜索备注 / 地点">
+    </div>
+  </header>
+  <div class="tagbar" id="tagbar"></div>
+  <main id="timeline"></main>
+
+  <button class="fab" id="fabBtn">+</button>
+</div>
+
+<!-- 拍照/编辑弹层 -->
+<div class="sheet" id="editSheet">
+  <div class="sheet-body">
+    <div class="sheet-title" id="editTitle">新建随手记
+      <span class="sheet-close" onclick="closeSheet('editSheet')">取消</span>
+    </div>
+    <img class="preview-img" id="previewImg">
+    <div class="readonly-row"><span class="k">🕐 时间</span><span class="v" id="timeText">—</span></div>
+    <div class="readonly-row"><span class="k">📍 地点</span><span class="v" id="addrText">定位中…</span></div>
+    <div class="field">
+      <label>备注（可多行）</label>
+      <textarea id="noteInput" placeholder="写点什么…"></textarea>
+    </div>
+    <div class="field">
+      <label>标签</label>
+      <div class="tag-select" id="tagSelect"></div>
+    </div>
+    <div class="field">
+      <label>地点修正（定位不准可手改）</label>
+      <input id="addrInput" placeholder="例如：河南周口商水县龙塘河村">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="saveBtn">保存</button>
+    </div>
+    <div class="btn-row" id="detailActions" style="display:none">
+      <button class="btn btn-ghost" onclick="openExport()">导出分享</button>
+      <button class="btn btn-danger" onclick="delNote()">删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导出弹层 -->
+<div class="sheet" id="exportSheet">
+  <div class="sheet-body">
+    <div class="sheet-title">导出分享
+      <span class="sheet-close" onclick="closeSheet('exportSheet')">关闭</span>
+    </div>
+    <div class="field">
+      <label>选择模板</label>
+      <div class="tmpl">
+        <div class="tmpl-item sel" data-t="auto" onclick="setTmpl(this)"><div class="mini"></div>原图比例</div>
+        <div class="tmpl-item" data-t="square" onclick="setTmpl(this)"><div class="mini"></div>1:1 朋友圈</div>
+        <div class="tmpl-item" data-t="portrait" onclick="setTmpl(this)"><div class="mini"></div>9:16 竖版</div>
+      </div>
+    </div>
+    <img class="export-preview" id="exportPreview">
+    <button class="btn btn-primary" id="downloadBtn">下载图片</button>
+    <p style="font-size:12px;color:#b3b7bf;text-align:center;margin-top:8px">手机端如无法下载，可长按上方预览图保存</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<input type="file" id="fileInput" accept="image/*" style="display:none">
+
+<script>
+// ================= 数据层 (IndexedDB) =================
+const DB_NAME = 'photo-notes', STORE = 'notes';
+function openDB(){
+  return new Promise((res, rej)=>{
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = e=>{ e.target.result.createObjectStore(STORE, {keyPath:'id'}) };
+    r.onsuccess = e=>res(e.target.result);
+    r.onerror = e=>rej(e.target.error);
+  });
+}
+let _db;
+async function db(){ return _db || (_db = await openDB()) }
+async function getAll(){
+  const d = await db();
+  return new Promise((res, rej)=>{
+    const r = d.transaction(STORE).objectStore(STORE).getAll();
+    r.onsuccess = ()=>res(r.result);
+    r.onerror = ()=>rej(r.error);
+  });
+}
+async function putNote(n){
+  const d = await db();
+  return new Promise((res, rej)=>{
+    const r = d.transaction(STORE,'readwrite').objectStore(STORE).put(n);
+    r.onsuccess = ()=>res();
+    r.onerror = ()=>rej(r.error);
+  });
+}
+async function delNoteById(id){
+  const d = await db();
+  return new Promise((res, rej)=>{
+    const r = d.transaction(STORE,'readwrite').objectStore(STORE).delete(id);
+    r.onsuccess = ()=>res();
+    r.onerror = ()=>rej(r.error);
+  });
+}
+
+// ================= 状态 =================
+const TAGS = ['生活','学习','工作','美食','旅行','其他'];
+let editing = null;      // 当前编辑的 note（null=新建）
+let currentImg = null;   // 当前图片 dataURL
+let currentTime = null;
+let currentAddr = '';
+let activeTag = '';
+let exportTmpl = 'auto';
+let exportDataUrl = null;
+
+// ================= 工具 =================
+const $ = s=>document.querySelector(s);
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.style.display='block';
+  clearTimeout(t._h); t._h = setTimeout(()=>t.style.display='none', 1800);
+}
+function closeSheet(id){ $('#'+id).classList.remove('show') }
+function openSheet(id){ $('#'+id).classList.add('show') }
+function fmtTime(ts){
+  const d = new Date(ts);
+  const p = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function dayKey(ts){
+  const d = new Date(ts);
+  const p = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function dayLabel(key){
+  const today = dayKey(Date.now());
+  const y = new Date(Date.now()-864e5);
+  const yKey = dayKey(y.getTime());
+  if(key===today) return '今天';
+  if(key===yKey) return '昨天';
+  const [Y,M,D] = key.split('-').map(Number);
+  return `${M}月${D}日`;
+}
+function compressImg(file){
+  return new Promise((res, rej)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      const MAX = 1600;
+      let {width:w, height:h} = img;
+      const scale = Math.min(1, MAX/Math.max(w,h));
+      w = Math.round(w*scale); h = Math.round(h*scale);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg', .82));
+    };
+    img.onerror = rej;
+    img.src = url;
+  });
+}
+
+// ================= 定位 =================
+function getLoc(){
+  return new Promise(res=>{
+    if(!navigator.geolocation) return res('');
+    navigator.geolocation.getCurrentPosition(
+      p=>{
+        // 反向地理编码（免费接口，失败则回退坐标）
+        const lat=p.coords.latitude.toFixed(5), lng=p.coords.longitude.toFixed(5);
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=zh-CN&zoom=16`)
+          .then(r=>r.json())
+          .then(j=>res(j.display_name || `${lat}, ${lng}`))
+          .catch(()=>res(`${lat}, ${lng}`));
+      },
+      ()=>res(''),
+      {timeout:8000}
+    );
+  });
+}
+
+// ================= 新建 / 编辑 =================
+async function newNote(){
+  editing = null;
+  currentImg = null; currentTime = Date.now(); currentAddr = '';
+  $('#editTitle').textContent = '新建随手记';
+  $('#previewImg').src = '';
+  $('#previewImg').style.display = 'none';
+  $('#timeText').textContent = fmtTime(currentTime);
+  $('#addrText').textContent = '等待拍照…';
+  $('#noteInput').value = '';
+  $('#addrInput').value = '';
+  renderTagSelect('');
+  $('#detailActions').style.display = 'none';
+  $('#fileInput').click();
+}
+
+async function onFileSelected(e){
+  const f = e.target.files[0];
+  e.target.value = '';
+  if(!f) return;
+  try{
+    currentImg = await compressImg(f);
+  }catch(err){
+    toast('图片处理失败'); return;
+  }
+  $('#previewImg').src = currentImg;
+  $('#previewImg').style.display = 'block';
+  currentTime = Date.now();
+  $('#timeText').textContent = fmtTime(currentTime);
+  $('#addrText').textContent = '定位中…';
+  openSheet('editSheet');
+  const addr = await getLoc();
+  currentAddr = addr || '';
+  $('#addrText').textContent = addr || '定位失败，可手动填写';
+  $('#addrInput').value = addr;
+}
+
+async function openDetail(id){
+  const all = await getAll();
+  const n = all.find(x=>x.id===id);
+  if(!n) return;
+  editing = n;
+  currentImg = n.photo;
+  currentTime = n.ts;
+  currentAddr = n.addr || '';
+  $('#editTitle').textContent = '随手记详情';
+  $('#previewImg').src = n.photo;
+  $('#previewImg').style.display = 'block';
+  $('#timeText').textContent = fmtTime(n.ts);
+  $('#addrText').textContent = n.addr || '未记录';
+  $('#noteInput').value = n.note || '';
+  $('#addrInput').value = n.addr || '';
+  renderTagSelect((n.tags||[]).join(','));
+  $('#detailActions').style.display = 'flex';
+  $('#saveBtn').textContent = '保存修改';
+  openSheet('editSheet');
+}
+
+function renderTagSelect(sel){
+  const sels = sel ? sel.split(',') : [];
+  const box = $('#tagSelect');
+  box.innerHTML = TAGS.map(t=>
+    `<div class="tag-opt ${sels.includes(t)?'sel':''}" data-tag="${t}" onclick="toggleTag(this)">${t}</div>`
+  ).join('');
+}
+
+function toggleTag(el){
+  el.classList.toggle('sel');
+}
+
+async function saveNote(){
+  if(!currentImg){ toast('请先拍照或选图'); return }
+  const tags = [...document.querySelectorAll('#tagSelect .tag-opt.sel')].map(x=>x.dataset.tag);
+  const note = {
+    id: editing ? editing.id : Date.now().toString(36) + Math.random().toString(36).slice(2,7),
+    photo: currentImg,
+    ts: currentTime,
+    addr: ($('#addrInput').value.trim()) || currentAddr || '',
+    note: $('#noteInput').value.trim(),
+    tags
+  };
+  await putNote(note);
+  closeSheet('editSheet');
+  toast('已保存');
+  renderTimeline();
+  editing = null;
+}
+
+async function delNote(){
+  if(!editing) return;
+  if(!confirm('确定删除这条随手记？')) return;
+  await delNoteById(editing.id);
+  closeSheet('editSheet');
+  toast('已删除');
+  renderTimeline();
+  editing = null;
+}
+
+// ================= 时间线 =================
+async function renderTimeline(){
+  const kw = $('#searchInput').value.trim().toLowerCase();
+  let all = await getAll();
+  all.sort((a,b)=>b.ts-a.ts);
+  if(activeTag) all = all.filter(n=>(n.tags||[]).includes(activeTag));
+  if(kw) all = all.filter(n=>
+    (n.note||'').toLowerCase().includes(kw) || (n.addr||'').toLowerCase().includes(kw)
+  );
+  const main = $('#timeline');
+  if(!all.length){
+    main.innerHTML = `<div class="empty-state"><div class="big">📷</div>还没有随手记<br>点右下角 + 拍一张吧</div>`;
+    return;
+  }
+  // 按天分组
+  const groups = {};
+  all.forEach(n=>{
+    const k = dayKey(n.ts);
+    (groups[k] = groups[k] || []).push(n);
+  });
+  let html = '';
+  for(const k of Object.keys(groups)){
+    html += `<div class="day-group"><div class="day-title">${dayLabel(k)}</div>`;
+    groups[k].forEach(n=>{
+      html += `
+      <div class="card" onclick="openDetail('${n.id}')">
+        <img src="${n.photo}" loading="lazy">
+        <div class="card-info">
+          <div class="t"><span>🕐 ${fmtTime(n.ts).slice(5)}</span><span>📍 ${n.addr||'未记录'}</span></div>
+          <div class="n ${n.note?'':'empty'}">${n.note ? escapeHtml(n.note) : '（无备注）'}</div>
+          ${(n.tags||[]).length ? `<div class="tags">${n.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>` : ''}
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  main.innerHTML = html;
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) }
+
+function renderTagbar(){
+  const bar = $('#tagbar');
+  bar.innerHTML = `<div class="chip ${activeTag===''?'active':''}" onclick="setTag('')">全部</div>` +
+    TAGS.map(t=>`<div class="chip ${activeTag===t?'active':''}" onclick="setTag('${t}')">${t}</div>`).join('');
+}
+function setTag(t){ activeTag = t; renderTagbar(); renderTimeline() }
+
+// ================= 导出拼图 =================
+function setTmpl(el){
+  document.querySelectorAll('.tmpl-item').forEach(x=>x.classList.remove('sel'));
+  el.classList.add('sel');
+  exportTmpl = el.dataset.t;
+  buildExport();
+}
+
+async function openExport(){
+  if(!editing){ toast('请先打开一条随手记'); return }
+  $('#exportPreview').src = '';
+  openSheet('exportSheet');
+  document.querySelectorAll('.tmpl-item')[0].classList.add('sel');
+  exportTmpl = 'auto';
+  buildExport();
+}
+
+function buildExport(){
+  const n = editing;
+  if(!n) return;
+  const img = new Image();
+  img.onload = ()=>{
+    const {width:W, height:H} = img;
+    const INFO_PAD = 18, INFO_GAP = 6;
+    // 计算信息区高度：时间/地点一行 + 备注（最多显示6行）+ 标签 + 底栏
+    const c = document.createElement('canvas');
+    const g = c.getContext('2d');
+    g.font = '14px sans-serif';
+    const maxW = 400;
+    const noteLines = n.note ? Math.ceil(g.measureText(n.note).width / (maxW-20)) : 1;
+    const infoH = 20 + INFO_GAP*4 + (noteLines>6?6:noteLines)*21 + 18;
+
+    let pw, ph, sx=0, sy=0, sw=W, sh=H, scale=1;
+    if(exportTmpl==='auto'){
+      scale = Math.min(1080/W, 1080/H, 1.5);
+      pw = Math.round(W*scale); ph = Math.round(H*scale) + infoH;
+    }else if(exportTmpl==='square'){
+      const side = Math.min(W,H); sx=(W-side)/2; sy=0; sw=side; sh=side;
+      scale = 1; pw = 900; ph = 900 + infoH;
+    }else{ // 9:16 portrait
+      scale = Math.min(720/W, 1280/H, 1.5);
+      pw = Math.round(W*scale); ph = Math.round(H*scale) + infoH;
+      if(pw/ph < 9/16){ // 补边到 9:16
+        ph = Math.round(pw*16/9);
+      }
+    }
+    c.width = pw; c.height = ph;
+    g.fillStyle = '#fff'; g.fillRect(0,0,pw,ph);
+    g.drawImage(img, sx, sy, sw, sh, 0, 0, Math.round(sw*scale), Math.round(sh*scale));
+    const iy = Math.round(sh*scale) + 8;
+    // 信息区
+    g.fillStyle = '#1f2329'; g.font = '600 13px sans-serif';
+    g.fillText(`🕐 ${fmtTime(n.ts)}`, INFO_PAD, iy + 15);
+    if(n.addr){
+      g.font = '13px sans-serif'; g.fillStyle = '#646a73';
+      g.fillText(`📍 ${n.addr}`, INFO_PAD, iy + 36);
+    }
+    if(n.note){
+      g.font = '14px sans-serif'; g.fillStyle = '#1f2329';
+      const lines = wrapText(g, n.note, pw-INFO_PAD*2);
+      lines.slice(0,6).forEach((ln,i)=>g.fillText(ln, INFO_PAD, iy + 36 + (n.addr?24:0) + 20 + i*21));
+    }
+    if((n.tags||[]).length){
+      let tx = INFO_PAD; g.font = '11px sans-serif';
+      n.tags.forEach(t=>{
+        const w = g.measureText(t).width + 16;
+        g.fillStyle = '#eef3ff'; g.fillRect(tx, c.height-34, w, 20);
+        g.fillStyle = '#2f6bff'; g.fillText(t, tx+8, c.height-20);
+        tx += w + 6;
+      });
+    }
+    g.fillStyle = '#b3b7bf'; g.font = '10px sans-serif';
+    g.textAlign = 'right';
+    g.fillText('随手记 PhotoNote', pw-INFO_PAD, c.height-12);
+    g.textAlign = 'left';
+    exportDataUrl = c.toDataURL('image/jpeg', .92);
+    $('#exportPreview').src = exportDataUrl;
+  };
+  img.src = n.photo;
+}
+
+function wrapText(ctx, text, maxW){
+  const out = [];
+  let line = '';
+  for(const ch of text){
+    const test = line + ch;
+    if(ctx.measureText(test).width > maxW && line){
+      out.push(line); line = ch;
+    }else line = test;
+  }
+  if(line) out.push(line);
+  return out;
+}
+
+// ================= 事件 =================
+$('#fabBtn').onclick = newNote;
+$('#fileInput').onchange = onFileSelected;
+$('#saveBtn').onclick = saveNote;
+$('#downloadBtn').onclick = ()=>{
+  if(!exportDataUrl){ toast('请先选择一条记录'); return }
+  const a = document.createElement('a');
+  a.href = exportDataUrl;
+  a.download = '随手记_' + Date.now() + '.jpg';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  toast('已开始下载，若失败请长按预览图保存');
+};
+$('#searchInput').addEventListener('input', ()=>renderTimeline());
+// 点击遮罩关闭
+document.querySelectorAll('.sheet').forEach(s=>{
+  s.addEventListener('click', e=>{ if(e.target===s) s.classList.remove('show') });
+});
+
+renderTagbar();
+renderTimeline();
+</script>
+</body>
+</html>
