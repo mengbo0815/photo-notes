@@ -41,7 +41,7 @@
   .chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
 
   /* ===== 时间线 ===== */
-  main{padding:4px 16px calc(120px + env(safe-area-inset-bottom))}
+  main{padding:4px 16px calc(140px + env(safe-area-inset-bottom, 0px))}
   .day-group{margin-top:14px}
   .day-title{font-size:13px;color:var(--text2);margin-bottom:8px;padding-left:2px}
   .card{
@@ -64,7 +64,7 @@
 
   /* ===== 悬浮拍照按钮 ===== */
   .fab{
-    position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:30;
+    position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom, 0px));z-index:30;
     width:60px;height:60px;border-radius:50%;background:var(--primary);
     color:#fff;font-size:30px;border:none;box-shadow:0 4px 14px rgba(47,107,255,.4);
     display:flex;align-items:center;justify-content:center;cursor:pointer;
@@ -80,7 +80,7 @@
   .sheet.show{display:flex}
   .sheet-body{
     background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;
-    padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom));
+    padding:16px;padding-bottom:calc(80px + env(safe-area-inset-bottom, 0px));
     max-height:92vh;overflow-y:auto;
     animation:up .22s ease;
   }
@@ -319,20 +319,30 @@ function reverseGeocode(lat, lng){
   });
 }
 
-// 定位一次（可配置超时），失败返回空
-function locateOnce(timeout){
+// 定位一次：先低精度（网络/WiFi，几秒），失败再高精度（GPS，最多12秒）
+function locateOnce(){
   return new Promise(res=>{
     if(!navigator.geolocation) return res(false);
+    // 第1次：低精度（网络定位，速度快）
     navigator.geolocation.getCurrentPosition(
-      p=>{
-        cachedCoord = {lat:p.coords.latitude, lng:p.coords.longitude};
-        reverseGeocode(p.coords.latitude.toFixed(5), p.coords.longitude.toFixed(5)).then(a=>{
-          cachedLoc = a; res(true);
-        });
+      p=>onSuccess(p, res),
+      ()=>{
+        // 第2次：开启高精度（GPS），最长12秒
+        navigator.geolocation.getCurrentPosition(
+          p=>onSuccess(p, res),
+          ()=>res(false),
+          {enableHighAccuracy:true, timeout:12000, maximumAge:60000}
+        );
       },
-      ()=>res(false),
-      {enableHighAccuracy:true, timeout:timeout||12000, maximumAge:120000}
+      {enableHighAccuracy:false, timeout:6000, maximumAge:120000}
     );
+  });
+}
+
+function onSuccess(p, res){
+  cachedCoord = {lat:p.coords.latitude, lng:p.coords.longitude};
+  reverseGeocode(p.coords.latitude.toFixed(5), p.coords.longitude.toFixed(5)).then(a=>{
+    cachedLoc = a; res(true);
   });
 }
 
@@ -349,14 +359,11 @@ async function preloadLoc(){
   locateOnce(10000);
 }
 
-// 拍照后取地址：优先用预热缓存，没有则实时定位（失败重试2次）
+// 拍照后取地址：优先用预热缓存；缓存空时只试1次（避免死磕GPS等到30秒）
 async function getLoc(){
   if(cachedLoc) return cachedLoc;
-  for(let i=0;i<3;i++){
-    const ok = await locateOnce(10000);
-    if(ok && cachedLoc) return cachedLoc;
-  }
-  return '';
+  const ok = await locateOnce(8000);
+  return ok ? cachedLoc : '';
 }
 
 // ================= 新建 / 编辑 =================
