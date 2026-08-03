@@ -320,17 +320,24 @@ function reverseGeocode(lat, lng){
 }
 
 // 定位一次：先低精度（网络/WiFi，几秒），失败再高精度（GPS，最多12秒）
+let geoDenied = false;  // 权限是否被拒
 function locateOnce(){
   return new Promise(res=>{
     if(!navigator.geolocation) return res(false);
+    const ok = p=>onSuccess(p, res);
+    const fail = ()=>{ geoDenied = true; res(false); };
     // 第1次：低精度（网络定位，速度快）
     navigator.geolocation.getCurrentPosition(
-      p=>onSuccess(p, res),
-      ()=>{
+      ok,
+      e=>{
+        if(e && (e.code===1 || e.PERMISSION_DENIED===1)){ geoDenied = true; return res(false); }
         // 第2次：开启高精度（GPS），最长12秒
         navigator.geolocation.getCurrentPosition(
-          p=>onSuccess(p, res),
-          ()=>res(false),
+          ok,
+          e2=>{
+            if(e2 && (e2.code===1 || e2.PERMISSION_DENIED===1)) geoDenied = true;
+            res(false);
+          },
           {enableHighAccuracy:true, timeout:12000, maximumAge:60000}
         );
       },
@@ -346,24 +353,17 @@ function onSuccess(p, res){
   });
 }
 
-// 页面加载后预热：先拿坐标，拍照时秒出地址
-async function preloadLoc(){
-  if(cachedLoc) return;
-  // 权限已拒绝就不再试
-  try{
-    if(navigator.permissions){
-      const st = await navigator.permissions.query({name:'geolocation'});
-      if(st.state==='denied') return;
-    }
-  }catch(e){}
-  locateOnce(10000);
+// 用户点击「+」时预热定位（有触摸手势，浏览器才会弹权限框并放行）
+function preloadLoc(){
+  if(cachedLoc || cachedCoord) return;
+  locateOnce();
 }
 
-// 拍照后取地址：优先用预热缓存；缓存空时只试1次（避免死磕GPS等到30秒）
+// 拍照后取地址：优先用预热缓存；缓存空时再定位1次
 async function getLoc(){
   if(cachedLoc) return cachedLoc;
-  const ok = await locateOnce(8000);
-  return ok ? cachedLoc : '';
+  const ok = await locateOnce();
+  return ok && cachedLoc ? cachedLoc : '';
 }
 
 // ================= 新建 / 编辑 =================
@@ -374,11 +374,12 @@ async function newNote(){
   $('#previewImg').src = '';
   $('#previewImg').style.display = 'none';
   $('#timeText').textContent = fmtTime(currentTime);
-  $('#addrText').textContent = '等待拍照…';
+  $('#addrText').textContent = '定位中…';
   $('#noteInput').value = '';
   $('#addrInput').value = '';
   renderTagSelect('');
   $('#detailActions').style.display = 'none';
+  preloadLoc();          // 用户手势触发定位（拍照期间在后台完成）
   $('#fileInput').click();
 }
 
@@ -399,7 +400,11 @@ async function onFileSelected(e){
   openSheet('editSheet');
   const addr = await getLoc();
   currentAddr = addr || '';
-  $('#addrText').textContent = addr || '定位失败，可手动填写';
+  if(addr){
+    $('#addrText').textContent = addr;
+  }else{
+    $('#addrText').textContent = geoDenied ? '⚠️ 定位权限被拒绝，可手动填写' : '定位失败，可手动填写';
+  }
   $('#addrInput').value = addr;
 }
 
@@ -632,8 +637,6 @@ renderTimeline();
 if(/MicroMessenger/i.test(navigator.userAgent)){
   $('#wxBanner').style.display = 'block';
 }
-// 预热定位：拍照时地址秒出
-preloadLoc();
 </script>
 </body>
 </html>
