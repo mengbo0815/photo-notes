@@ -41,7 +41,7 @@
   .chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
 
   /* ===== 时间线 ===== */
-  main{padding:4px 16px 120px}
+  main{padding:4px 16px calc(120px + env(safe-area-inset-bottom))}
   .day-group{margin-top:14px}
   .day-title{font-size:13px;color:var(--text2);margin-bottom:8px;padding-left:2px}
   .card{
@@ -80,7 +80,8 @@
   .sheet.show{display:flex}
   .sheet-body{
     background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;
-    padding:16px;max-height:92vh;overflow-y:auto;
+    padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom));
+    max-height:92vh;overflow-y:auto;
     animation:up .22s ease;
   }
   @keyframes up{from{transform:translateY(40px);opacity:.5}to{transform:none;opacity:1}}
@@ -132,10 +133,15 @@
     background:rgba(0,0,0,.8);color:#fff;padding:9px 18px;border-radius:20px;
     font-size:14px;display:none;white-space:nowrap;
   }
+  .banner{
+    display:none;background:#fff7e6;color:#8a5a00;font-size:13px;
+    padding:8px 16px;line-height:1.5;border-bottom:1px solid #ffe3a3;
+  }
 </style>
 </head>
 <body>
 <div class="app">
+  <div class="banner" id="wxBanner">⚠️ 微信内置浏览器不支持定位。请点击右上角「···」→「在浏览器打开」，用 Chrome / Safari 使用。</div>
   <header>
     <h1>📷 随手记</h1>
     <div class="search">
@@ -300,22 +306,57 @@ function compressImg(file){
 }
 
 // ================= 定位 =================
-function getLoc(){
+let cachedLoc = '';          // 预热缓存的地址
+let cachedCoord = null;      // 预热缓存的坐标
+let locTimer = null;
+
+function reverseGeocode(lat, lng){
   return new Promise(res=>{
-    if(!navigator.geolocation) return res('');
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=zh-CN&zoom=16`)
+      .then(r=>r.json())
+      .then(j=>res(j.display_name || `${lat}, ${lng}`))
+      .catch(()=>res(`${lat}, ${lng}`));
+  });
+}
+
+// 定位一次（可配置超时），失败返回空
+function locateOnce(timeout){
+  return new Promise(res=>{
+    if(!navigator.geolocation) return res(false);
     navigator.geolocation.getCurrentPosition(
       p=>{
-        // 反向地理编码（免费接口，失败则回退坐标）
-        const lat=p.coords.latitude.toFixed(5), lng=p.coords.longitude.toFixed(5);
-        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=zh-CN&zoom=16`)
-          .then(r=>r.json())
-          .then(j=>res(j.display_name || `${lat}, ${lng}`))
-          .catch(()=>res(`${lat}, ${lng}`));
+        cachedCoord = {lat:p.coords.latitude, lng:p.coords.longitude};
+        reverseGeocode(p.coords.latitude.toFixed(5), p.coords.longitude.toFixed(5)).then(a=>{
+          cachedLoc = a; res(true);
+        });
       },
-      ()=>res(''),
-      {timeout:8000}
+      ()=>res(false),
+      {enableHighAccuracy:true, timeout:timeout||12000, maximumAge:120000}
     );
   });
+}
+
+// 页面加载后预热：先拿坐标，拍照时秒出地址
+async function preloadLoc(){
+  if(cachedLoc) return;
+  // 权限已拒绝就不再试
+  try{
+    if(navigator.permissions){
+      const st = await navigator.permissions.query({name:'geolocation'});
+      if(st.state==='denied') return;
+    }
+  }catch(e){}
+  locateOnce(10000);
+}
+
+// 拍照后取地址：优先用预热缓存，没有则实时定位（失败重试2次）
+async function getLoc(){
+  if(cachedLoc) return cachedLoc;
+  for(let i=0;i<3;i++){
+    const ok = await locateOnce(10000);
+    if(ok && cachedLoc) return cachedLoc;
+  }
+  return '';
 }
 
 // ================= 新建 / 编辑 =================
@@ -579,6 +620,13 @@ document.querySelectorAll('.sheet').forEach(s=>{
 
 renderTagbar();
 renderTimeline();
+
+// 微信内置浏览器不支持标准定位 → 顶部提示
+if(/MicroMessenger/i.test(navigator.userAgent)){
+  $('#wxBanner').style.display = 'block';
+}
+// 预热定位：拍照时地址秒出
+preloadLoc();
 </script>
 </body>
 </html>
